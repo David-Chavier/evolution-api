@@ -7,32 +7,61 @@ services:
     restart: always
     depends_on:
       - redis
-      - postgres
+      - evolution-postgres
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       SERVER_TYPE: http
       SERVER_PORT: 8080
-      SERVER_URL: http://localhost:8080
-      AUTHENTICATION_API_KEY: 429683C4C977415CAAFCCE10F7D57E11
+      SERVER_URL: ${RAILWAY_PUBLIC_DOMAIN}
+      AUTHENTICATION_API_KEY: P5wdooH3tqqTwtyw5NfkhdGgmx58ROmHoME71fLppsg=
+      
+      # Banco de dados PostgreSQL Railway
       DATABASE_PROVIDER: postgresql
-      DATABASE_URL: postgresql://postgres:IotmpIUGWSpbEKnXNmjRxkItuCZVtGpS@postgres:5432/railway
+      DATABASE_CONNECTION_URI: postgresql://postgres:IotmpIUGWSpbEKnXNmjRxkItuCZVtGpS@postgres.railway.internal:5432/railway?schema=public
+
+      # Redis Railway
       CACHE_REDIS_ENABLED: "true"
-      CACHE_REDIS_URI: redis://redis:6379/6
+      CACHE_REDIS_URI: redis://default:FEMsOwmVlOkklKSHXgBBpWVhmLQZCyko@redis.railway.internal:6379/6
+      CACHE_REDIS_SAVE_INSTANCES: "false"
+
       LANGUAGE: en
+    volumes:
+      - evolution_instances:/evolution/instances
+    networks:
+      - evolution-net
+      - dokploy-network
+    expose:
+      - "8080"
+
+  frontend:
+    container_name: evolution_frontend
+    image: evoapicloud/evolution-manager:latest
+    restart: always
+    ports:
+      - "3000:80"
     networks:
       - evolution-net
 
   redis:
     container_name: evolution_redis
-    image: redis:7
+    image: redis:latest
     restart: always
-    ports:
-      - "6379:6379"
+    command: >
+      redis-server --port 6379 --appendonly yes
+    volumes:
+      - evolution_redis:/data
     networks:
-      - evolution-net
+      evolution-net:
+        aliases:
+          - evolution-redis
+      dokploy-network:
+        aliases:
+          - evolution-redis
+    expose:
+      - "6379"
 
-  postgres:
+  evolution-postgres:
     container_name: evolution_postgres
     image: postgres:15
     restart: always
@@ -40,16 +69,28 @@ services:
       POSTGRES_DB: railway
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: IotmpIUGWSpbEKnXNmjRxkItuCZVtGpS
-    ports:
-      - "5432:5432"
-    networks:
-      - evolution-net
+    command:
+      - postgres
+      - -c
+      - max_connections=1000
+      - -c
+      - listen_addresses=*
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - evolution-net
+      - dokploy-network
+    expose:
+      - "5432"
 
 volumes:
+  evolution_instances:
+  evolution_redis:
   postgres_data:
 
 networks:
   evolution-net:
+    name: evolution-net
     driver: bridge
+  dokploy-network:
+    external: true
